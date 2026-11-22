@@ -75,28 +75,51 @@ class CosaApi(var token: String? = null) {
         val raw: JSONObject
     )
 
-    private fun JSONObject.dbl(k: String): Double? =
-        if (has(k) && !isNull(k)) optDouble(k).takeIf { !it.isNaN() } else null
+    /** JSON ağacında anahtarı derinlemesine arar (iç içe nesneler/diziler dahil). */
+    private fun deepFind(node: Any?, key: String): Any? {
+        when (node) {
+            is JSONObject -> {
+                node.keys().forEach { k ->
+                    if (k.equals(key, true) && !node.isNull(k)) return node.get(k)
+                }
+                node.keys().forEach { k -> deepFind(node.opt(k), key)?.let { return it } }
+            }
+            is org.json.JSONArray -> for (i in 0 until node.length()) deepFind(node.opt(i), key)?.let { return it }
+        }
+        return null
+    }
+
+    private fun JSONObject.dbl(vararg keys: String): Double? {
+        for (k in keys) {
+            val v = deepFind(this, k) ?: continue
+            when (v) {
+                is Number -> return v.toDouble()
+                is String -> v.toDoubleOrNull()?.let { return it }
+                is JSONObject -> listOf("value", "current", "temperature").forEach { f ->
+                    if (v.has(f)) v.optDouble(f).takeIf { !it.isNaN() }?.let { return it }
+                }
+            }
+        }
+        return null
+    }
 
     fun getStatus(id: String): Status {
         val e = post("/api/endpoints/getEndpoint", JSONObject().put("endpoint", id))
             .optJSONObject("endpoint") ?: throw ApiException("Cihaz bilgisi gelmedi")
 
-        val combi = e.opt("combiState")?.toString()?.lowercase()
-        val connected = e.optJSONObject("masterDevice")?.optJSONObject("modelDevice")
-            ?.takeIf { it.has("isConnected") }?.optBoolean("isConnected")
-            ?: if (e.has("isConnected")) e.optBoolean("isConnected") else null
+        val combi = deepFind(e, "combiState")?.toString()?.lowercase()
+        val connected = deepFind(e, "isConnected")?.toString()?.let { it == "true" }
 
         return Status(
             name = e.optString("name", "Termostat"),
-            temperature = e.dbl("temperature"),
-            humidity = e.dbl("humidity"),
+            temperature = e.dbl("temperature", "currentTemperature", "roomTemperature"),
+            humidity = e.dbl("humidity", "currentHumidity"),
             targetTemperature = e.dbl("targetTemperature"),
-            combiOn = when (combi) { null -> null; "on", "true", "1" -> true; else -> false },
+            combiOn = when (combi) { null -> null; "on", "true", "1", "combistateon" -> true; else -> false },
             connected = connected,
-            mode = e.optString("mode", ""),
-            option = e.optString("option", ""),
-            targets = e.optJSONObject("targetTemperatures") ?: JSONObject(),
+            mode = deepFind(e, "mode")?.toString() ?: "",
+            option = deepFind(e, "option")?.toString() ?: "",
+            targets = (deepFind(e, "targetTemperatures") as? JSONObject) ?: JSONObject(),
             raw = e
         )
     }
