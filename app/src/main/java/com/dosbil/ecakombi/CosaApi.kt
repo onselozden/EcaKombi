@@ -107,28 +107,36 @@ class CosaApi(var token: String? = null) {
         val e = post("/api/endpoints/getEndpoint", JSONObject().put("endpoint", id))
             .optJSONObject("endpoint") ?: throw ApiException("Cihaz bilgisi gelmedi")
 
-        val combi = deepFind(e, "combiState")?.toString()?.lowercase()
-        val connected = deepFind(e, "isConnected")?.toString()?.let { it == "true" }
+        val combi = e.optString("combiState", "").lowercase()
+        val lost = combi == "connectionlost"
+        val connected = if (lost) false else deepFind(e, "isConnected")?.toString()?.let { it == "true" }
+        val targets = JSONObject()
+        listOf("home", "away", "sleep", "custom").forEach { k ->
+            e.dbl(k + "Temperature")?.let { targets.put(k, it) }
+        }
 
         return Status(
             name = e.optString("name", "Termostat"),
             temperature = e.dbl("temperature", "currentTemperature", "roomTemperature"),
             humidity = e.dbl("humidity", "currentHumidity"),
             targetTemperature = e.dbl("targetTemperature"),
-            combiOn = when (combi) { null -> null; "on", "true", "1", "combistateon" -> true; else -> false },
+            combiOn = when (combi) { "", "connectionlost" -> null; "on", "true", "1" -> true; else -> false },
             connected = connected,
-            mode = deepFind(e, "mode")?.toString() ?: "",
-            option = deepFind(e, "option")?.toString() ?: "",
-            targets = (deepFind(e, "targetTemperatures") as? JSONObject) ?: JSONObject(),
+            mode = e.optString("mode", ""),
+            option = e.optString("option", ""),
+            targets = targets,
             raw = e
         )
     }
 
-    /** mode: manual | schedule | auto ; option: home | away | sleep | custom | frozen */
-    fun setMode(id: String, mode: String, option: String? = null) {
-        val b = JSONObject().put("endpoint", id).put("mode", mode)
-        if (option != null) b.put("option", option)
-        post("/api/endpoints/setMode", b)
+    /** mode: manual | schedule | auto */
+    fun setMode(id: String, mode: String) {
+        post("/api/endpoints/setMode", JSONObject().put("endpoint", id).put("mode", mode))
+    }
+
+    /** option: home | away | sleep | custom | frozen */
+    fun setOption(id: String, option: String) {
+        post("/api/endpoints/setOption", JSONObject().put("endpoint", id).put("option", option))
     }
 
     fun setTargetTemperatures(id: String, targets: JSONObject) {
