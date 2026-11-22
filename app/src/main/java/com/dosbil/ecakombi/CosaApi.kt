@@ -104,12 +104,12 @@ class CosaApi(var token: String? = null) {
     }
 
     fun getStatus(id: String): Status {
-        val e = post("/api/endpoints/getEndpoint", JSONObject().put("endpoint", id))
-            .optJSONObject("endpoint") ?: throw ApiException("Cihaz bilgisi gelmedi")
+        val r = post("/api/endpoints/getEndpoint", JSONObject().put("endpoint", id))
+        val e = r.optJSONObject("endpoint") ?: throw ApiException("Cihaz bilgisi gelmedi")
 
         val combi = e.optString("combiState", "").lowercase()
-        val lost = combi == "connectionlost"
-        val connected = if (lost) false else deepFind(e, "isConnected")?.toString()?.let { it == "true" }
+        val connected = deepFind(r, "isConnected")?.toString()?.let { it == "true" }
+            ?: if (combi == "connectionlost") false else null
         val targets = JSONObject()
         listOf("home", "away", "sleep", "custom").forEach { k ->
             e.dbl(k + "Temperature")?.let { targets.put(k, it) }
@@ -117,15 +117,15 @@ class CosaApi(var token: String? = null) {
 
         return Status(
             name = e.optString("name", "Termostat"),
-            temperature = e.dbl("temperature", "currentTemperature", "roomTemperature"),
-            humidity = e.dbl("humidity", "currentHumidity"),
-            targetTemperature = e.dbl("targetTemperature"),
+            temperature = r.dbl("temperature", "currentTemperature", "roomTemperature"),
+            humidity = r.dbl("humidity", "currentHumidity"),
+            targetTemperature = r.dbl("targetTemperature"),
             combiOn = when (combi) { "", "connectionlost" -> null; "on", "true", "1" -> true; else -> false },
             connected = connected,
             mode = e.optString("mode", ""),
             option = e.optString("option", ""),
             targets = targets,
-            raw = e
+            raw = r
         )
     }
 
