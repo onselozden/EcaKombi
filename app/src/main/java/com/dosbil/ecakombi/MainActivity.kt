@@ -291,7 +291,7 @@ class MainActivity : Activity() {
         tvTemp.text = fmt(s.temperature)
         val parts = mutableListOf<String>()
         s.humidity?.let { parts += "Nem %${it.toInt()}" }
-        when (s.connected) { true -> parts += "Bağlı"; false -> parts += "Bağlantı yok"; null -> {} }
+        when (s.connected) { true -> parts += "Bağlı"; false -> parts += "⚠ Termostat bağlantısı yok"; null -> {} }
         tvInfo.text = parts.joinToString("  •  ")
         tvFlame.text = when (s.combiOn) { true -> "🔥 Kombi yanıyor"; false -> "Kombi beklemede"; null -> "" }
         tvFlame.setTextColor(if (s.combiOn == true) accent else dim)
@@ -319,6 +319,7 @@ class MainActivity : Activity() {
         val s = status ?: return; val ep = current ?: return
         val v = pendingTarget ?: return
         val targets = JSONObject(s.targets.toString()).put(s.option, v)
+        listOf("home", "away", "sleep", "custom").forEach { if (!targets.has(it)) targets.put(it, 20.0) }
         showMsg("Gönderiliyor…")
         bgTask({
             api.setTargetTemperatures(ep.id, targets)
@@ -329,16 +330,17 @@ class MainActivity : Activity() {
     private fun setOption(option: String) {
         val ep = current ?: return
         showMsg("Gönderiliyor…")
-        bgTask({ api.setMode(ep.id, "manual", option); ui.post { refresh() } })
+        bgTask({
+            if (status?.mode != "manual") api.setMode(ep.id, "manual")
+            api.setOption(ep.id, option); ui.post { refresh() }
+        })
     }
 
     private fun setMode(mode: String) {
         val ep = current ?: return
-        val s = status
         showMsg("Gönderiliyor…")
         bgTask({
-            if (mode == "manual") api.setMode(ep.id, "manual", s?.option?.takeIf { it.isNotEmpty() } ?: "home")
-            else api.setMode(ep.id, mode)
+            api.setMode(ep.id, mode)
             ui.post { refresh() }
         })
     }
