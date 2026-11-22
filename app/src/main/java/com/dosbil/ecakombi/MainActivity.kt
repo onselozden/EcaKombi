@@ -174,7 +174,9 @@ class MainActivity : Activity() {
 
         // Üst satır
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        tvName = text(current?.name ?: "", 22f, bold = true)
+        tvName = text(current?.name ?: "", 22f, bold = true).apply {
+            setOnLongClickListener { showRaw(); true }   // uzun bas: ham veri
+        }
         top.addView(tvName, lp(0, weight = 1f))
         if (endpoints.size > 1) top.addView(button("Cihaz") { pickDevice() }, lp(LinearLayout.LayoutParams.WRAP_CONTENT))
         top.addView(button("⟳") { refresh() }, lp(dp(52)).apply { leftMargin = dp(8) })
@@ -213,7 +215,7 @@ class MainActivity : Activity() {
 
         // Seçenekler
         root.addView(text("Durum", 14f, dim), lp(top = 22))
-        val opts = listOf("home" to "Evde", "away" to "Dışarıda", "sleep" to "Uyku", "custom" to "Özel", "frozen" to "Kapalı")
+        val opts = listOf("home" to "Evde", "away" to "Dışarı", "sleep" to "Uyku", "custom" to "Özel", "frozen" to "Kapalı")
         val optRow = LinearLayout(this)
         opts.forEachIndexed { i, (k, label) ->
             val b = button(label) { setOption(k) }.apply { textSize = 13f }
@@ -238,6 +240,24 @@ class MainActivity : Activity() {
 
         setContentView(scroll)
         status?.let { render(it) }
+    }
+
+    private fun showRaw() {
+        val raw = status?.raw?.toString(2) ?: "Veri yok"
+        val tv = TextView(this).apply {
+            text = raw; textSize = 11f; setTextIsSelectable(true)
+            typeface = Typeface.MONOSPACE; setPadding(dp(16), dp(16), dp(16), dp(16))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Ham veri")
+            .setView(ScrollView(this).apply { addView(tv) })
+            .setPositiveButton("Kopyala") { _, _ ->
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("kombi", raw))
+                Toast.makeText(this, "Kopyalandı", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Kapat", null)
+            .show()
     }
 
     private fun pickDevice() {
