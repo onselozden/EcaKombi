@@ -107,6 +107,12 @@ class CosaApi(var token: String? = null) {
         val r = post("/api/endpoints/getEndpoint", JSONObject().put("endpoint", id))
         val e = r.optJSONObject("endpoint") ?: throw ApiException("Cihaz bilgisi gelmedi")
 
+        // Anlık sıcaklık/nem endpoint kaydında yok, telemetri servisinden gelir
+        val tel = try {
+            post("/api/endpoints/getTelemetries", JSONObject().put("endpoint", id))
+        } catch (ex: Exception) { JSONObject().put("hata", ex.message ?: "") }
+        r.put("telemetries_yaniti", tel)
+
         val combi = e.optString("combiState", "").lowercase()
         val connected = deepFind(r, "isConnected")?.toString()?.let { it == "true" }
             ?: if (combi == "connectionlost") false else null
@@ -117,8 +123,9 @@ class CosaApi(var token: String? = null) {
 
         return Status(
             name = e.optString("name", "Termostat"),
-            temperature = r.dbl("temperature", "currentTemperature", "roomTemperature"),
-            humidity = r.dbl("humidity", "currentHumidity"),
+            temperature = tel.dbl("temperature", "currentTemperature", "roomTemperature")
+                ?: r.dbl("temperature", "currentTemperature", "roomTemperature"),
+            humidity = tel.dbl("humidity", "currentHumidity") ?: r.dbl("humidity", "currentHumidity"),
             targetTemperature = r.dbl("targetTemperature"),
             combiOn = when (combi) { "", "connectionlost" -> null; "on", "true", "1" -> true; else -> false },
             connected = connected,
